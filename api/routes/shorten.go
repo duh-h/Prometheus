@@ -9,8 +9,10 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/duh-h/Prometheus/api/database"
 	"github.com/duh-h/Prometheus/api/models"
+	"github.com/duh-h/Prometheus/api/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 )
 
 func ShortenURL(c *gin.Context) {
@@ -48,4 +50,67 @@ func ShortenURL(c *gin.Context) {
 		})
 	}
 
+	if !utils.IsDifferentDomain(body.URL) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"erroe": "You can hack thid System ",
+		})
+		return
+	}
+
+	body.URL = utils.EnsureHttpPrefix(body.URL)
+
+	var id string
+
+	if body.CustomShort == "" {
+		id = uuid.New().String()[:6]
+	} else {
+		id = body.CustomShort
+	}
+
+	r := database.CreateClient(0)
+	defer r.Close()
+
+	val, _ = r.Get(database.Ctx, id).Result()
+
+	if val != "" {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "url alredy exists",
+		})
+		return
+	}
+
+	if body.Expiry == 0 {
+		body.Expiry = 24
+	}
+
+	err = r.Set(database.Ctx, id, body.URL, body.Expiry*3600*time.Second).Err()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Unable connect to the redis server",
+		})
+		return
+	}
+
+	resp := models.Response{
+		Expiry:          body.Expiry,
+		XRateLimitReset: 30,
+		XRateRemaining:  10,
+		URL:             body.URL,
+		CustomShort:     "",
+	}
+
+	r2.Decr(database.Ctx, c.ClientIP())
+
+	val, _ = r2.Get(database.Ctx, c.ClientIP()).Result()
+
+	resp.XRateRemaining, _ = strconv.Atoi(val)
+
+	ttl, _ := r2.TTL(database.Ctx, c.ClientIP()).Result()
+
+	resp.XRateLimitReset = ttl / time.Nanosecond / time.Minute
+
+	resp.CustomShort = os.Getenv("DOMAIN") + "/" + id
+
+	c.JSON(http.StatusOK, resp)
 }
