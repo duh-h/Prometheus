@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/duh-h/Prometheus/api/routes"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -30,4 +31,5 @@ func main() {
 func setupRouters(router *gin.Engine) {
 
 	router.POST("/api/v1", routes.ShortenURL)
+	router.GET("/api/v1/:shortID", routes.GetByShortID)
 }
