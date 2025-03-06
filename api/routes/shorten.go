@@ -67,10 +67,10 @@ func ShortenURL(c *gin.Context) {
 		id = body.CustomShort
 	}
 
-	r := database.CreateClient(0)
-	defer r.Close()
+	//r := database.CreateClient(0)
+	//defer r.Close()
 
-	val, _ = r.Get(database.Ctx, id).Result()
+	val, _ = database.Client.Get(database.Ctx, id).Result()
 
 	if val != "" {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -83,7 +83,7 @@ func ShortenURL(c *gin.Context) {
 		body.Expiry = 24
 	}
 
-	err = r.Set(database.Ctx, id, body.URL, body.Expiry*3600*time.Second).Err()
+	err = database.Client.Set(database.Ctx, id, body.URL, body.Expiry*3600*time.Second).Err()
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
